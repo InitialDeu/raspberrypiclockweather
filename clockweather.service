@@ -1,0 +1,18 @@
+[Unit]
+Description=Raspberry Pi Clock & Weather
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/repository
+ExecStart=/usr/bin/python3 /usr/src/scripts/display_clock_weather.py
+Restart=always
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/pi/.Xauthority"
+Environment="XDG_RUNTIME_DIR=/run/user/%U"
+
+[Install]
+WantedBy=graphical.target
+
