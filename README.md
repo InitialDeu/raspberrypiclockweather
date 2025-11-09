@@ -21,7 +21,9 @@ Install required dependencies:
 sudo apt update
 sudo apt install -y python3 python3-pil python3-requests python3-tk git
 
-Installation
+---
+
+## Installation
 
 Clone the repository
 ```bash
@@ -87,7 +89,9 @@ To stop or restart:
 sudo systemctl stop clockweather
 sudo systemctl restart clockweather
 
-Quick Install (One Command)
+---
+
+## Quick Install (One Command)
 
 You can automate everything (install, clone, setup, and service) with the script below.
 
@@ -152,7 +156,9 @@ Run it:
 ```bash
 ./quick-install.sh
 
-Notes
+---
+
+## Notes
 Tested on Raspberry Pi OS (Bookworm) with X11 desktop session
 
 Works best with HDMI display (detected as HDMI-1)
@@ -161,9 +167,11 @@ Requires active internet connection for weather updates
 
 Screen automatically dims between 22:30 and 07:30
 
-Author
+--
+
+## Author
 Developed by InitialDeu
 Feel free to fork, improve, and contribute.
 
-License
+## License
 This project is released under the MIT License.
