@@ -35,18 +35,23 @@ Edit the script to set your location and OpenWeatherMap key:
 
 ```bash
 nano display_clock_weather.py
-Change these lines:
 ```
+
+Change these lines:
+
 ```python
 CITY = "YourCity"
 API_KEY = "YourOpenWeatherAPIKey"
-You can get a free API key here: https://openweathermap.org/api
 ```
+You can get a free API key here: https://openweathermap.org/api
+
 Run manually (test)
 ```bash
 python3 display_clock_weather.py
-If everything is correct, you’ll see the fullscreen clock and weather on your HDMI display.
 ```
+
+If everything is correct, you’ll see the fullscreen clock and weather on your HDMI display.
+
 Autostart on boot (systemd)
 To automatically start the display after boot, use the included service file.
 
@@ -125,7 +130,7 @@ else
     cd "$INSTALL_DIR" && sudo git pull
 fi
 
-echo "⚙️ Installing systemd service..."
+echo "Installing systemd service..."
 sudo bash -c "cat > /etc/systemd/system/$SERVICE_NAME" <<'EOF'
 [Unit]
 Description=Raspberry Pi Clock & Weather
