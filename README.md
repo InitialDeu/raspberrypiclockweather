@@ -107,7 +107,7 @@ Copy and paste it directly into your terminal on your Raspberry Pi.
 #!/bin/bash
 # Raspberry Pi Clock & Weather - Quick Installer
 # Author: InitialDeu
-# License: MIT
+# License: GPL
 
 set -e
 
