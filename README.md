@@ -183,4 +183,4 @@ Developed by InitialDeu
 Feel free to fork, improve, and contribute.
 
 ## License
-This project is released under the MIT License.
+This project is released under the GPL License.
