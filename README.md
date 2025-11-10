@@ -173,7 +173,7 @@ Run it:
 ---
 
 ## Notes
-Tested on Raspberry Pi OS (Bookworm) with X11 desktop session
+Tested on Raspberry Pi OS (Bookworm) with X11 desktop session using a Raspberry PI 4
 
 Works best with HDMI display (detected as HDMI-1)
 
