@@ -172,6 +172,28 @@ Run it:
 ```
 ---
 
+## Logging
+
+If you want to store the logs and enable the logrotate, you can create a logrotate file:
+```bash
+/var/log/clockweather.log {
+    daily
+    missingok
+    notifempty
+    copytruncate
+    dateext
+    maxage 1
+    rotate 0
+}
+```
+
+And Force it using:
+
+```bash
+sudo logrotate -f /etc/logrotate.d/clockweather
+```
+
+
 ## Notes
 Tested on Raspberry Pi OS (Bookworm) with X11 desktop session using a Raspberry PI 4
 
