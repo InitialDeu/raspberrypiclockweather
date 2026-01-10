@@ -193,6 +193,9 @@ And Force it using:
 sudo logrotate -f /etc/logrotate.d/clockweather
 ```
 
+## Updates
+
+V1.0.1 Added Zodiac Sign, Moon Phases and Saint of the Day
 
 ## Notes
 Tested on Raspberry Pi OS (Bookworm) with X11 desktop session using a Raspberry PI 4

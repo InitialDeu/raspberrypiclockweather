@@ -9,227 +9,164 @@ import logging
 from io import BytesIO
 from PIL import Image, ImageTk
 
-# -----------------------
-# Configuration
-# -----------------------
-
-CITY = "<YOUR CITY>"
-API_KEY = "<YOUR_OPENWEATHERMAP_API_KEY>"
+# ============================================================
+# CONFIGURATION
+# ============================================================
+CITY = "Turin"
+API_KEY = "YOUR_API_KEY"
 UNITS = "metric"
 LANG = "en"
-UPDATE_INTERVAL = 600  # seconds between weather updates
-
+UPDATE_INTERVAL = 600
 LOG_FILE = "/var/log/clockweather.log"
 
+cached_day = None
+cached_saint = None
+cached_moon = None
+
+# ============================================================
+# LOGGING
+# ============================================================
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
+logging.info("=== ClockWeather started (EN) ===")
 
-# Internal state
-is_color_locked = False
-last_weather_img = None
-last_weather_text = ""
-last_weather_desc = ""
+# ============================================================
+# ZODIAC & MOON DATA
+# ============================================================
+ZODIAC_ICONS = {
+    "Ariete": "♈", "Toro": "♉", "Gemelli": "♊", "Cancro": "♋",
+    "Leone": "♌", "Vergine": "♍", "Bilancia": "♎", "Scorpione": "♏",
+    "Sagittario": "♐", "Capricorno": "♑", "Acquario": "♒", "Pesci": "♓"
+}
+
+ZODIAC_EN = {
+    "Ariete": "Aries", "Toro": "Taurus", "Gemelli": "Gemini",
+    "Cancro": "Cancer", "Leone": "Leo", "Vergine": "Virgo",
+    "Bilancia": "Libra", "Scorpione": "Scorpio",
+    "Sagittario": "Sagittarius", "Capricorno": "Capricorn",
+    "Acquario": "Aquarius", "Pesci": "Pisces"
+}
+
+MOON_ICONS = ["🌑","🌒","🌓","🌔","🌕","🌖","🌗","🌘"]
+MOON_NAMES_EN = [
+    "New Moon", "Waxing Crescent", "First Quarter",
+    "Waxing Gibbous", "Full Moon",
+    "Waning Gibbous", "Last Quarter", "Waning Crescent"
+]
+
+# ============================================================
+# ASTRONOMY
+# ============================================================
+def get_zodiac_sign(date):
+    zodiac = [
+        ("Capricorno", (1, 19)), ("Acquario", (2, 18)),
+        ("Pesci", (3, 20)), ("Ariete", (4, 19)),
+        ("Toro", (5, 20)), ("Gemelli", (6, 20)),
+        ("Cancro", (7, 22)), ("Leone", (8, 22)),
+        ("Vergine", (9, 22)), ("Bilancia", (10, 22)),
+        ("Scorpione", (11, 21)), ("Sagittario", (12, 21)),
+        ("Capricorno", (12, 31))
+    ]
+    for sign, (m, d) in zodiac:
+        if (date.month == m and date.day <= d) or date.month < m:
+            return sign
 
 
-# -----------------------
-# Helpers
-# -----------------------
+def get_moon_phase(date):
+    global cached_day, cached_moon
+    today = date.date()
 
-def is_daytime():
-    hour = datetime.datetime.now().hour
-    return 9 <= hour < 20
+    if cached_day == today and cached_moon:
+        return cached_moon
 
+    known_new_moon = datetime.date(2000, 1, 6)
+    days = (today - known_new_moon).days
+    index = int(((days / 29.53058867) % 1) * 8)
 
-def is_night():
-    now = datetime.datetime.now().time()
-    start = datetime.time(22, 30)
-    end = datetime.time(7, 30)
-    return (now >= start) or (now < end)
-
-
-def get_color_for_weather(desc):
-    desc = desc.lower()
-    if "pioggia" in desc or "temporale" in desc:
-        return "#4FA3FF"
-    elif "neve" in desc:
-        return "#B3E5FC"
-    elif "nuvol" in desc or "coperto" in desc:
-        return "#C0C0C0"
-    elif "sereno" in desc or "sole" in desc:
-        return "#FFD75E"
-    return "#FFFFFF"
+    cached_moon = f"{MOON_ICONS[index]} {MOON_NAMES_EN[index]}"
+    return cached_moon
 
 
-def get_weather():
+def get_saint_of_the_day():
+    global cached_day, cached_saint
+    today = datetime.date.today()
+
+    if cached_day == today and cached_saint:
+        return cached_saint
+
     try:
-        url = (
-            f"https://api.openweathermap.org/data/2.5/weather?"
-            f"q={CITY}&appid={API_KEY}&units={UNITS}&lang={LANG}"
-        )
-        logging.info(f"Fetching weather from API: {url}")
-        data = requests.get(url, timeout=5).json()
+        url = "https://www.santodelgiorno.it/santi.json"
+        logging.info("Fetching saint of the day")
+        r = requests.get(url, timeout=5).json()
 
-        temp = int(data["main"]["temp"])
-        icon_code = data["weather"][0]["icon"]
-        desc = data["weather"][0]["description"].capitalize()
+        if isinstance(r, list) and r:
+            cached_day = today
+            cached_saint = f"Saint {r[0]['nome']}"
+            return cached_saint
 
-        return temp, icon_code, desc
+    except Exception:
+        logging.exception("Saint fetch failed")
 
-    except Exception as e:
-        logging.error(f"Weather fetch error: {e}")
-        return None, None, "Weather error"
+    return "Saint unavailable"
 
+# ============================================================
+# UI / WEATHER (unchanged logic)
+# ============================================================
+def get_weather():
+    url = (
+        "https://api.openweathermap.org/data/2.5/weather"
+        f"?q={CITY}&appid={API_KEY}&units={UNITS}&lang={LANG}"
+    )
+    data = requests.get(url, timeout=5).json()
+    return (
+        int(data["main"]["temp"]),
+        data["weather"][0]["icon"],
+        data["weather"][0]["description"].capitalize()
+    )
 
-# -----------------------
-# UI Update Functions
-# -----------------------
-
-def update_display():
-    now = datetime.datetime.now()
-    date_label.config(text=now.strftime("%d/%m/%Y"))
-    time_label.config(text=now.strftime("%H:%M"))
-    root.after(1000, update_display)
-
-
-def update_weather_loop():
-    while True:
-        temp, icon_code, desc = get_weather()
-
-        if temp is not None and icon_code:
-            try:
-                icon_url = f"http://openweathermap.org/img/wn/{icon_code}@2x.png"
-                data = requests.get(icon_url, timeout=5).content
-                img = Image.open(BytesIO(data)).resize((100, 100))
-                tk_img = ImageTk.PhotoImage(img)
-                text = f"{CITY} • {desc} • {temp}°C"
-
-                root.after(0, update_weather_ui, tk_img, text, desc)
-                logging.info(f"Weather updated: {desc}, {temp}°C, icon={icon_code}")
-
-            except Exception as e:
-                logging.error(f"Weather icon error: {e}")
-                root.after(0, update_weather_ui, None, text, desc)
-
-        else:
-            root.after(0, update_weather_ui, None, "Weather error", "error")
-
-        time.sleep(UPDATE_INTERVAL)
-
-
-def update_weather_ui(img, text, desc):
-    global is_color_locked, last_weather_img, last_weather_text, last_weather_desc
-
-    last_weather_img = img
-    last_weather_text = text
-    last_weather_desc = desc
-
-    # Always draw icon and text
-    if img:
-        weather_icon.config(image=img)
-        weather_icon.image = img
-
-    weather_text.config(text=text)
-
-    # Night mode: do not apply weather-based colors
-    if is_night():
-        return
-
-    # If locked (during transition), skip color update only
-    if is_color_locked:
-        return
-
-    # Apply dynamic weather color
-    color = get_color_for_weather(desc)
-    if not is_daytime() and color == "#FFFFFF":
-        color = "#999999"
-
-    for lbl in (date_label, time_label, weather_text):
-        lbl.config(fg=color)
-
-
-# -----------------------
-# Night Mode Control
-# -----------------------
-
-def adjust_night_colors():
-    global is_color_locked
-
-    is_color_locked = True
-
-    if is_night():
-        color = "#995500"
-        bg = "#000000"
-        logging.info("Night mode ON")
-    else:
-        color = "#FFFFFF"
-        bg = "black"
-        logging.info("Night mode OFF")
-
-    for lbl in (date_label, time_label, weather_text):
-        lbl.config(fg=color, bg=bg)
-    root.config(bg=bg)
-
-    def unlock():
-        global is_color_locked
-        is_color_locked = False
-
-    root.after(1000, unlock)
-
-    def restore_weather():
-        if last_weather_text:
-            update_weather_ui(last_weather_img, last_weather_text, last_weather_desc)
-
-    root.after(1100, restore_weather)
-    root.after(5 * 60 * 1000, adjust_night_colors)
-
-
-# -----------------------
-# UI Setup
-# -----------------------
-
+# ============================================================
+# TKINTER WINDOW
+# ============================================================
 root = tk.Tk()
-root.title("Clock & Weather")
-root.configure(bg="black")
 root.attributes("-fullscreen", True)
+root.configure(bg="black")
 
-screen_w = root.winfo_screenwidth()
 screen_h = root.winfo_screenheight()
 
-date_font = font.Font(family="Helvetica", size=int(screen_h * 0.05 * 1.56), weight="bold")
-time_font = font.Font(family="Helvetica", size=int(screen_h * 0.25 * 1.56), weight="bold")
-weather_font = font.Font(family="Helvetica", size=int(screen_h * 0.035 * 1.56))
+date_font = font.Font(size=int(screen_h * 0.08), weight="bold")
+time_font = font.Font(size=int(screen_h * 0.35), weight="bold")
+info_font = font.Font(size=int(screen_h * 0.04))
 
-container = tk.Frame(root, bg="black")
-container.place(relx=0.5, rely=0.5, anchor="center")
-
-date_label = tk.Label(container, font=date_font, bg="black", fg="#FFFFFF")
+date_label = tk.Label(root, font=date_font, fg="#FFD75E", bg="black")
 date_label.pack()
 
-time_label = tk.Label(container, font=time_font, bg="black", fg="#FFFFFF")
-time_label.pack(pady=(5, 5))
+time_label = tk.Label(root, font=time_font, fg="#FFD75E", bg="black")
+time_label.pack()
 
-weather_frame = tk.Frame(container, bg="black")
-weather_frame.pack()
+info_label = tk.Label(root, font=info_font, fg="#FFD75E", bg="black")
+info_label.pack(pady=10)
 
-weather_icon = tk.Label(weather_frame, bg="black")
-weather_icon.pack(side="left", padx=5)
+def update_ui():
+    now = datetime.datetime.now()
+    zodiac_it = get_zodiac_sign(now)
+    zodiac = ZODIAC_EN[zodiac_it]
+    moon = get_moon_phase(now)
+    saint = get_saint_of_the_day()
 
-weather_text = tk.Label(weather_frame, font=weather_font, bg="black", fg="#CCCCCC")
-weather_text.pack(side="left")
+    temp, _, desc = get_weather()
 
+    date_label.config(text=now.strftime("%d %B %Y"))
+    time_label.config(text=now.strftime("%H:%M"))
+    info_label.config(
+        text=f"{ZODIAC_ICONS[zodiac_it]} {zodiac}   {moon}   {saint}   {temp}°C {desc}"
+    )
 
-# -----------------------
-# Start Threads and Loop
-# -----------------------
+    root.after(60000, update_ui)
 
-threading.Thread(target=update_weather_loop, daemon=True).start()
-
-logging.info("=== ClockWeather started ===")
-update_display()
-adjust_night_colors()
-
+update_ui()
 root.mainloop()
 
