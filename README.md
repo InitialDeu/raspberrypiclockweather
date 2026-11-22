@@ -19,8 +19,12 @@ A fullscreen weather and clock display for Raspberry Pi using Tkinter and OpenWe
 Install required dependencies:
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-pil python3-requests python3-tk git
+sudo apt install -y python3 python3-requests python3-tk git
 ```
+
+The requirements differ between Raspberry Pi OS Bookworm (HDMI, first test) and
+Bullseye (Pi Zero 2 W with a 3.5" SPI display): see [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+
 ---
 
 ## Installation
@@ -37,11 +41,25 @@ Edit the script to set your location and OpenWeatherMap key:
 nano display_clock_weather.py
 ```
 
-Change these lines:
+Recommended: put them in an environment file read by the systemd service,
+so the key never ends up in the script or in git:
+
+```bash
+echo 'OWM_API_KEY=YourOpenWeatherAPIKey' | sudo tee /etc/clockweather.env
+echo 'CW_CITY=YourCity' | sudo tee -a /etc/clockweather.env
+echo 'CW_LANG=en' | sudo tee -a /etc/clockweather.env     # optional: "it" for the Italian version
+sudo chmod 600 /etc/clockweather.env
+```
+
+**Language (optional):** `CW_LANG=it` switches the display to Italian
+(zodiac sign, moon phase, saint of the day, `dd/mm/yyyy` date and the weather description),
+like the preview above. Default is English.
+
+Alternatively, change the defaults directly in the script:
 
 ```python
-CITY = "YourCity"
-API_KEY = "YourOpenWeatherAPIKey"
+CITY = os.environ.get("CW_CITY", "YourCity")
+API_KEY = os.environ.get("OWM_API_KEY", "YourOpenWeatherAPIKey")
 ```
 You can get a free API key here: https://openweathermap.org/api
 
@@ -50,7 +68,12 @@ Run manually (test)
 python3 display_clock_weather.py
 ```
 
-If everything is correct, you’ll see the fullscreen clock and weather on your HDMI display.
+If everything is correct, you’ll see the fullscreen clock and weather on your display.
+The layout adapts automatically to the screen resolution and orientation
+(tested at 480x320, 320x480 and 1920x1080).
+
+Using a 3.5" SPI touchscreen (ILI9486, "3.5inch RPi Display")? See [docs/OTTIMIZZAZIONI.md](docs/OTTIMIZZAZIONI.md)
+for the display setup.
 
 Autostart on boot (systemd)
 To automatically start the display after boot, use the included service file.
@@ -65,7 +88,7 @@ Paste this:
 ```ini
 [Unit]
 Description=Raspberry Pi Clock & Weather
-After=network-online.target
+After=graphical.target network-online.target
 Wants=network-online.target
 
 [Service]
@@ -74,13 +97,22 @@ User=pi
 WorkingDirectory=/opt/raspberrypiclockweather
 ExecStart=/usr/bin/python3 /opt/raspberrypiclockweather/display_clock_weather.py
 Restart=always
-Environment="DISPLAY=:0"
-Environment="XAUTHORITY=/home/pi/.Xauthority"
-Environment="XDG_RUNTIME_DIR=/run/user/%U"
+RestartSec=10
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+EnvironmentFile=-/etc/clockweather.env
 
 [Install]
 WantedBy=graphical.target
 ```
+Create the log file (the service runs as `pi`, which cannot create files in `/var/log`;
+if you skip this, the script falls back to `~/clockweather.log`):
+
+```bash
+sudo touch /var/log/clockweather.log
+sudo chown pi:pi /var/log/clockweather.log
+```
+
 Then enable it:
 
 ```bash
@@ -121,7 +153,7 @@ SERVICE_NAME="clockweather.service"
 
 echo "Installing Raspberry Pi Clock & Weather..."
 sudo apt update -y
-sudo apt install -y python3 python3-pil python3-requests python3-tk git
+sudo apt install -y python3 python3-requests python3-tk git
 
 if [ ! -d "$INSTALL_DIR" ]; then
     sudo git clone https://github.com/InitialDeu/raspberrypiclockweather.git "$INSTALL_DIR"
@@ -134,7 +166,7 @@ echo "Installing systemd service..."
 sudo bash -c "cat > /etc/systemd/system/$SERVICE_NAME" <<'EOF'
 [Unit]
 Description=Raspberry Pi Clock & Weather
-After=network-online.target
+After=graphical.target network-online.target
 Wants=network-online.target
 
 [Service]
@@ -143,13 +175,17 @@ User=pi
 WorkingDirectory=/opt/raspberrypiclockweather
 ExecStart=/usr/bin/python3 /opt/raspberrypiclockweather/display_clock_weather.py
 Restart=always
-Environment="DISPLAY=:0"
-Environment="XAUTHORITY=/home/pi/.Xauthority"
-Environment="XDG_RUNTIME_DIR=/run/user/%U"
+RestartSec=10
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+EnvironmentFile=-/etc/clockweather.env
 
 [Install]
 WantedBy=graphical.target
 EOF
+
+sudo touch /var/log/clockweather.log
+sudo chown pi:pi /var/log/clockweather.log
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now clockweather
@@ -197,10 +233,15 @@ sudo logrotate -f /etc/logrotate.d/clockweather
 
 V1.0.1 Added Zodiac Sign, Moon Phases and Saint of the Day
 
+V1.1.0 Auto-fit layout for any resolution/orientation, non-blocking network updates,
+weather errors no longer crash the app, clock synced to the minute, Pillow no longer required,
+optional Italian version (`CW_LANG=it`)
+(details in [docs/OTTIMIZZAZIONI.md](docs/OTTIMIZZAZIONI.md))
+
 ## Notes
 Tested on Raspberry Pi OS (Bookworm) with X11 desktop session using a Raspberry PI 4
 
-Works best with HDMI display (detected as HDMI-1)
+Works with HDMI displays and with 3.5" SPI displays (fbtft framebuffer, tested on Pi Zero 2 W / Bullseye)
 
 Requires active internet connection for weather updates
 

@@ -1,18 +1,19 @@
 [Unit]
 Description=Raspberry Pi Clock & Weather
-After=network-online.target
+After=graphical.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/repository
-ExecStart=/usr/bin/python3 /usr/src/scripts/display_clock_weather.py
+WorkingDirectory=/opt/raspberrypiclockweather
+ExecStart=/usr/bin/python3 /opt/raspberrypiclockweather/display_clock_weather.py
 Restart=always
-Environment="DISPLAY=:0"
-Environment="XAUTHORITY=/home/pi/.Xauthority"
-Environment="XDG_RUNTIME_DIR=/run/user/%U"
+RestartSec=10
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+# Optional file with OWM_API_KEY=..., CW_CITY=..., CW_LANG=en|it (leading "-" = may be missing)
+EnvironmentFile=-/etc/clockweather.env
 
 [Install]
 WantedBy=graphical.target
-
