@@ -8,6 +8,7 @@ import datetime
 import logging
 import os
 import threading
+import time
 import tkinter as tk
 from tkinter import font
 
@@ -30,6 +31,19 @@ LOG_FILE = "/var/log/clockweather.log"
 
 FG = "#FFD75E"
 BG = "black"
+
+# Night mode: dimmer text colour between NIGHT_START and NIGHT_END (HH:MM, may cross midnight).
+# CW_NIGHT_FG lower = darker. Set CW_NIGHT=off to disable.
+NIGHT_MODE = os.environ.get("CW_NIGHT", "on").lower() not in ("off", "0", "false", "no")
+NIGHT_START = os.environ.get("CW_NIGHT_START", "22:30")
+NIGHT_END = os.environ.get("CW_NIGHT_END", "07:30")
+FG_NIGHT = os.environ.get("CW_NIGHT_FG", "#5C3300")      # dim amber
+FADE_STEPS, FADE_MS = 30, 100                             # 3 s colour fade
+
+# Watchdog: if the network thread does not complete a cycle for this long (e.g. stuck
+# on DNS after a Wi-Fi drop), the app exits and systemd (Restart=always) restarts it.
+WATCHDOG_S = 3 * WEATHER_INTERVAL
+STALE_S = 3600                # weather older than this is shown as unavailable
 MARGIN = 0.04                 # fraction of the screen kept free on each side
 
 # Share of the usable height given to each line: date, time, info1, info2
@@ -156,7 +170,8 @@ def saint_label(name):
 # ============================================================
 # NETWORK DATA (background thread: the UI never freezes on slow requests)
 # ============================================================
-state = {"weather": None, "saint": None, "saint_day": None}
+state = {"weather": None, "weather_ts": 0.0, "saint": None, "saint_day": None,
+         "heartbeat": time.monotonic()}
 state_lock = threading.Lock()
 
 
@@ -176,13 +191,19 @@ def fetch_saint():
     raise ValueError("Unexpected saint payload")
 
 
+def seconds_to_midnight():
+    now = datetime.datetime.now()
+    nxt = datetime.datetime.combine(now.date() + datetime.timedelta(days=1), datetime.time(0, 0, 5))
+    return (nxt - now).total_seconds()
+
+
 def network_loop(stop):
     while not stop.is_set():
         wait = WEATHER_INTERVAL
         try:
             weather = fetch_weather()
             with state_lock:
-                state["weather"] = weather
+                state["weather"], state["weather_ts"] = weather, time.monotonic()
             logging.info("Weather updated: %s", weather)
         except Exception:
             logging.exception("Weather fetch failed")
@@ -199,7 +220,10 @@ def network_loop(stop):
                 logging.exception("Saint fetch failed")
                 wait = min(wait, RETRY_INTERVAL)
 
-        stop.wait(wait)
+        with state_lock:
+            state["heartbeat"] = time.monotonic()
+        # wake up right after midnight too, so the new saint shows up immediately
+        stop.wait(min(wait, seconds_to_midnight()))
 
 # ============================================================
 # TKINTER WINDOW
@@ -248,7 +272,10 @@ def set_line(key, text):
 def info_lines(now):
     with state_lock:
         weather = state["weather"]
-        saint = state["saint"] or T["saint_unavailable"]
+        if time.monotonic() - state["weather_ts"] > STALE_S:
+            weather = None                                  # too old: don't show it as current
+        saint = state["saint"] if state["saint_day"] == now.date() else None
+    saint = saint or T["saint_unavailable"]
     if weather:
         temp, desc = weather
         line1 = f"{CITY} • {desc} • {temp}°C"
@@ -260,17 +287,77 @@ def info_lines(now):
 
 
 def refresh_info():
-    """Every 5 s pick up new network data (no-op if nothing changed)."""
+    """Every 5 s pick up new network data (no-op if nothing changed) and check the watchdog."""
     line1, line2 = info_lines(datetime.datetime.now())
     set_line("info1", line1)
     set_line("info2", line2)
+    with state_lock:
+        silent = time.monotonic() - state["heartbeat"]
+    if silent > WATCHDOG_S:
+        logging.error("Network thread stuck for %d s: exiting so systemd restarts the app", silent)
+        os._exit(1)
     root.after(5000, refresh_info)
+
+
+# ============================================================
+# NIGHT MODE
+# ============================================================
+def _hhmm(txt):
+    h, m = txt.strip().split(":")
+    return datetime.time(int(h), int(m))
+
+
+def is_night(now):
+    if not NIGHT_MODE:
+        return False
+    start, end, t = _hhmm(NIGHT_START), _hhmm(NIGHT_END), now.time()
+    return (start <= t < end) if start < end else (t >= start or t < end)
+
+
+def _rgb(color):
+    r, g, b = root.winfo_rgb(color)                         # accepts "#RRGGBB" and colour names
+    return r // 257, g // 257, b // 257
+
+
+current_fg = FG
+
+
+def fade_to(color, step=0, start=None):
+    global current_fg
+    start = start or _rgb(current_fg)
+    end = _rgb(color)
+    k = (step + 1) / FADE_STEPS
+    mix = "#%02x%02x%02x" % tuple(round(a + (b - a) * k) for a, b in zip(start, end))
+    for lbl in labels.values():
+        lbl.config(fg=mix)
+    if step + 1 < FADE_STEPS:
+        root.after(FADE_MS, fade_to, color, step + 1, start)
+    else:
+        current_fg = color
+
+
+night_on = None
+
+
+def check_night(now):
+    global night_on, current_fg
+    night = is_night(now)
+    if night != night_on:
+        logging.info("Night mode %s", "ON" if night else "OFF")
+        if night_on is None:                                 # at startup: no fade
+            current_fg = FG_NIGHT if night else FG
+            for lbl in labels.values():
+                lbl.config(fg=current_fg)
+        else:
+            fade_to(FG_NIGHT if night else FG)
+        night_on = night
 
 
 def tick():
     now = datetime.datetime.now()
     set_line("date", now.strftime(T["date_format"]))
     set_line("time", now.strftime("%H:%M"))
+    check_night(now)
     # Fire again right at the start of the next minute, so the clock never lags
     ms = (60 - now.second) * 1000 - now.microsecond // 1000 + 50
     root.after(ms, tick)

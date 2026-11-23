@@ -51,6 +51,10 @@ echo 'CW_LANG=en' | sudo tee -a /etc/clockweather.env     # optional: "it" for t
 sudo chmod 600 /etc/clockweather.env
 ```
 
+**Night mode:** from 22:30 to 07:30 the text fades to a dim amber. Optional settings in
+`/etc/clockweather.env`: `CW_NIGHT_FG=#5C3300` (lower = darker), `CW_NIGHT_START=22:30`,
+`CW_NIGHT_END=07:30`, `CW_NIGHT=off` to disable.
+
 **Language (optional):** `CW_LANG=it` switches the display to Italian
 (zodiac sign, moon phase, saint of the day, `dd/mm/yyyy` date and the weather description),
 like the preview above. Default is English.
@@ -236,6 +240,9 @@ V1.0.1 Added Zodiac Sign, Moon Phases and Saint of the Day
 V1.1.0 Auto-fit layout for any resolution/orientation, non-blocking network updates,
 weather errors no longer crash the app, clock synced to the minute, Pillow no longer required,
 optional Italian version (`CW_LANG=it`)
+
+V1.2.0 Night mode back (darker, configurable), watchdog that restarts the app if updates get stuck,
+stale weather/saint no longer shown as current
 (details in [docs/OTTIMIZZAZIONI.md](docs/OTTIMIZZAZIONI.md))
 
 ## Notes

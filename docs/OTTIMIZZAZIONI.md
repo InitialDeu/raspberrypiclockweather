@@ -25,6 +25,8 @@ sul **Raspberry Pi Zero 2 W** con schermo **SPI da 3,5" 480×320** (novembre 202
 | 14 | `datetime.utcnow()` deprecato nelle versioni recenti di Python | `datetime.now(timezone.utc)` | Compatibilità futura |
 | 15 | La versione italiana (quella dello screenshot `ClockExample.png`) non era più nel codice | **Italiano opzionale**: `CW_LANG=it` (default `en`). Testi in un dizionario `TEXTS`: segno zodiacale e fasi lunari in italiano, data `gg/mm/aaaa`, messaggi di errore, e descrizione meteo in italiano da OpenWeatherMap | Una sola base di codice per le due lingue |
 | 16 | Il santo veniva mostrato come `Saint Santa Cecilia`: l'API di santodelgiorno.it restituisce già il titolo nel campo `nome` | In italiano il nome resta com'è (`Santa Cecilia`, `Sant'Aldo`); in inglese il titolo viene tradotto (`St. Cecilia`, `Sts. ...`, `Blessed ...`) | Niente titolo doppio |
+| 17 | Se la rete si bloccava (es. Wi-Fi che cade e DNS appeso), il thread di rete poteva restare fermo per sempre: meteo e santo non si aggiornavano più, ma l'orologio continuava a girare e nessuno se ne accorgeva | **Watchdog**: il thread segna un "battito" a ogni ciclo; se manca da più di 3 intervalli (30 min) l'app esce e systemd (`Restart=always`) la riavvia. Il meteo più vecchio di 1 ora viene mostrato come "non disponibile" e il santo di ieri non viene più mostrato oggi; il santo si aggiorna subito dopo mezzanotte | Aggiornamenti che riprendono da soli |
+| 18 | La modalità notte (presente fino al commit `a7ea18a`) era sparita e il testo restava giallo pieno anche di notte | **Modalità notte** reintrodotta: dalle 22:30 alle 07:30 il testo passa con dissolvenza di 3 s ad ambra scuro `#5C3300` (più scuro del vecchio `#995500`). Regolabile da `/etc/clockweather.env`: `CW_NIGHT_FG`, `CW_NIGHT_START`, `CW_NIGHT_END`, `CW_NIGHT=off` | Meno luce di notte |
 
 ### Service systemd (`clockweather.service`)
 
@@ -101,7 +103,7 @@ Il **touch** ancora non restituisce coordinate (interrupt OK, dati no): restano 
 
 ## 3. Da fare / idee
 
-- [ ] **Modalità notte**: il README la cita (22:30–07:30, transizioni di colore) ma il codice attuale non la implementa: è stata rimossa nel commit `bfd5e89`. L'implementazione precedente (`adjust_night_colors`, `smooth_color_transition`) è ancora nella history, commit `a7ea18a` "Updated the Night Fade": si può riprendere da lì. Nota: questo schermo non ha controllo PWM della retroilluminazione via software, quindi solo colori attenuati.
+- [x] **Modalità notte**: reintrodotta (punto 18). Nota: lo schermo SPI non ha controllo PWM della retroilluminazione via software, quindi si attenua solo il colore del testo; la retroilluminazione resta accesa.
 - [ ] **Emoji della luna**: sono caratteri fuori dal BMP (U+1F311…); con Tk 8.6 e senza font emoji possono comparire come quadratini. Alternativa: simboli BMP (○ ◐ ● ◑) o icone PNG.
 - [x] **Lingua**: italiano opzionale con `CW_LANG=it` (vedi punto 15).
 - [ ] **Icona meteo**: l'API restituisce il codice icona (`03d` ecc.) che oggi non viene usato.
