@@ -105,7 +105,7 @@ systemctl start --no-block piclock-wifi.service     # already connected -> just 
 systemctl restart clockweather 2>/dev/null || true   # so the clock shows the console address
 
 IP=$(hostname -I | awk '{print $1}')
-PORT=$(grep -E '^CW_ADMIN_PORT=' "$ENV" | cut -d= -f2); PORT=${PORT:-80}
+PORT=$(grep -E '^CW_ADMIN_PORT=' "$ENV" | cut -d= -f2 || true); PORT=${PORT:-80}
 echo
 echo "Done. Console: http://$IP$([ "$PORT" = 80 ] || echo ":$PORT")   (user: any, password: CW_ADMIN_PASSWORD)"
 echo "Safe hotspot test (detached from SSH, comes back by itself after 2 minutes):"
