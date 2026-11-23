@@ -5,6 +5,7 @@ The layout adapts automatically to any resolution and orientation:
 font sizes are computed from the real screen size so every line fits.
 """
 import datetime
+import json
 import logging
 import os
 import threading
@@ -44,6 +45,11 @@ FADE_STEPS, FADE_MS = 30, 100                             # 3 s colour fade
 # on DNS after a Wi-Fi drop), the app exits and systemd (Restart=always) restarts it.
 WATCHDOG_S = 3 * WEATHER_INTERVAL
 STALE_S = 3600                # weather older than this is shown as unavailable
+
+# Optional management console / Wi-Fi manager (admin/): status written by piclock_wifi.py
+NET_STATUS = os.environ.get("CW_NET_STATUS", "/run/piclock/net.json")
+ADMIN_PORT = os.environ.get("CW_ADMIN_PORT", "80")
+SHOW_URL_S = 120              # show the console address this long after start / after joining a network
 MARGIN = 0.04                 # fraction of the screen kept free on each side
 
 # Share of the usable height given to each line: date, time, info1, info2
@@ -84,6 +90,9 @@ TEXTS = {
         "date_format": "%d %B %Y",
         "weather_unavailable": "weather unavailable",
         "saint_unavailable": "Saint unavailable",
+        "hotspot_1": "Wi-Fi {ssid} · pw {pw}",
+        "hotspot_2": "then open http://{ip}",
+        "console": "Console: {url}",
         "moon": [
             "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
             "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent",
@@ -93,6 +102,9 @@ TEXTS = {
         "date_format": "%d/%m/%Y",          # no locale needed for month names
         "weather_unavailable": "meteo non disponibile",
         "saint_unavailable": "Santo non disponibile",
+        "hotspot_1": "Wi-Fi {ssid} · pw {pw}",
+        "hotspot_2": "poi apri http://{ip}",
+        "console": "Console: {url}",
         "moon": [
             "Luna Nuova", "Luna Crescente", "Primo Quarto", "Gibbosa Crescente",
             "Luna Piena", "Gibbosa Calante", "Ultimo Quarto", "Luna Calante",
@@ -269,7 +281,27 @@ def set_line(key, text):
     labels[key].config(text=text)
 
 
+def read_net_status():
+    try:
+        with open(NET_STATUS, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+net_seen = {"mode": None, "url_until": time.monotonic() + SHOW_URL_S}
+
+
 def info_lines(now):
+    net = read_net_status()
+    if net:
+        if net.get("mode") == "ap":
+            net_seen["mode"] = "ap"
+            return (T["hotspot_1"].format(ssid=net.get("ap_ssid", "?"), pw=net.get("ap_password", "?")),
+                    T["hotspot_2"].format(ip=net.get("ap_ip", "?")))
+        if net_seen["mode"] == "ap":                       # just left the hotspot: show the new address
+            net_seen["url_until"] = time.monotonic() + SHOW_URL_S
+        net_seen["mode"] = net.get("mode")
     with state_lock:
         weather = state["weather"]
         if time.monotonic() - state["weather_ts"] > STALE_S:
@@ -283,6 +315,9 @@ def info_lines(now):
         line1 = f"{CITY} • {T['weather_unavailable']}"
     line2 = (f"{zodiac_label(get_zodiac_sign(now))}   "
              f"{get_moon_phase(utc_now())}   {saint}")
+    if net and net.get("ip") and time.monotonic() < net_seen["url_until"]:
+        port = "" if ADMIN_PORT == "80" else f":{ADMIN_PORT}"
+        line2 = T["console"].format(url=f"http://{net['ip']}{port}")
     return line1, line2
 
 

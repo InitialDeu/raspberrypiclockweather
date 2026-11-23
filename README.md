@@ -76,6 +76,11 @@ If everything is correct, you’ll see the fullscreen clock and weather on your 
 The layout adapts automatically to the screen resolution and orientation
 (tested at 480x320, 320x480 and 1920x1080).
 
+**Optional management console:** a LAN-only web page to change city, language, night mode,
+Wi-Fi networks, restart/update the clock — plus a setup hotspot (`piclock-setup`) when the Pi
+can't find a known Wi-Fi network, so it can be moved to a new place and configured from a phone.
+See [docs/ADMIN.md](docs/ADMIN.md).
+
 Using a 3.5" SPI touchscreen (ILI9486, "3.5inch RPi Display")? See [docs/OTTIMIZZAZIONI.md](docs/OTTIMIZZAZIONI.md)
 for the display setup.
 
@@ -243,6 +248,9 @@ optional Italian version (`CW_LANG=it`)
 
 V1.2.0 Night mode back (darker, configurable), watchdog that restarts the app if updates get stuck,
 stale weather/saint no longer shown as current
+
+V1.3.0 Optional LAN management console and Wi-Fi setup hotspot (`admin/`, see [docs/ADMIN.md](docs/ADMIN.md));
+the clock shows the hotspot details and the console address on screen
 (details in [docs/OTTIMIZZAZIONI.md](docs/OTTIMIZZAZIONI.md))
 
 ## Notes
