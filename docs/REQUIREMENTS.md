@@ -78,6 +78,7 @@ API key and city go in `/etc/clockweather.env` (read by the service):
 OWM_API_KEY=your_key
 CW_CITY=Turin
 CW_LANG=en        # optional, "it" = Italian version
+CW_FG=#FFFFFF         # optional, day text colour
 CW_NIGHT=on           # optional: on (fixed hours) | sun (sunset to sunrise) | off
 CW_NIGHT_FG=#5C3300   # optional, night text colour (lower = darker)
 ```

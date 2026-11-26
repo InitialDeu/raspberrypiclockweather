@@ -34,7 +34,7 @@ UNITS = "metric"
 WEATHER_INTERVAL = 600        # seconds between weather refreshes
 FORECAST_INTERVAL = 1800      # seconds between forecast refreshes
 SYNC_CHECK_INTERVAL = 30      # seconds between checks of the clock synchronisation
-ROTATE_S = 8                  # seconds each detail (forecast, wind, ...) stays on screen
+ROTATE_S = 8                  # seconds each detail (forecast, sunrise, ...) stays on screen
 RAIN_POP = 0.3                # forecast probability from which rain or snow is announced
 RETRY_INTERVAL = 60           # seconds before retrying after a failure
 LOOP_TICK = 15                # seconds between checks of what is due (follows clock jumps after NTP sync)
@@ -43,7 +43,7 @@ SAINT_DAYS_AHEAD = 7          # saints downloaded in advance, so a network outag
 SAINT_CACHE = os.path.expanduser(os.environ.get("CW_SAINT_CACHE", "~/.cache/clockweather/saints.json"))
 LOG_FILE = "/var/log/clockweather.log"
 
-FG = "#FFD75E"
+FG = os.environ.get("CW_FG", "#FFFFFF")                 # day text colour
 BG = "black"
 
 # Night mode: dimmer text colour. CW_NIGHT=on uses NIGHT_START..NIGHT_END (HH:MM, may cross
@@ -72,17 +72,28 @@ SHOW_URL_S = 120              # show the console address this long after start /
 MARGIN = 0.04                 # fraction of the screen kept free on each side
 MIN_PX = 7                    # smallest font size
 
-# Rows from top to bottom with their share of the usable height. In portrait the weather
-# icon has its own row, in landscape it sits to the left of the weather text.
+# It is a clock first: the other rows get a small share of the usable height and the time
+# takes everything that is left, up to (almost) the full width of the screen.
+# "wide" is 16:10 or wider: zodiac, moon and saint share one row there.
 LAYOUTS = {
-    "landscape": (("date", 0.11), ("time", 0.39), ("weather", 0.115),
-                  ("detail", 0.072), ("astro", 0.072), ("saint", 0.072)),
-    "portrait": (("date", 0.065), ("time", 0.22), ("icon", 0.16), ("weather", 0.05),
-                 ("detail", 0.04), ("astro", 0.04), ("saint", 0.04)),
+    "wide": (("date", 0.11), ("time", None), ("weather", 0.08),
+             ("detail", 0.058), ("astro", 0.07)),
+    "landscape": (("date", 0.11), ("time", None), ("weather", 0.082),
+                  ("detail", 0.062), ("astro", 0.064), ("saint", 0.064)),
+    "portrait": (("date", 0.06), ("time", None), ("icon", 0.12), ("weather", 0.045),
+                 ("detail", 0.034), ("astro", 0.037), ("saint", 0.037)),
 }
 # Portrait screens are narrow but tall: these rows are split in two at the separator
 PORTRAIT_SPLIT = {"weather": (" • ", " · "), "astro": ("   ",)}
+# Helvetica-like fonts, the first one installed is used (Nimbus Sans on Raspberry Pi OS)
+FONTS = ("Nimbus Sans", "Nimbus Sans L", "TeX Gyre Heros", "FreeSans", "Liberation Sans",
+         "DejaVu Sans")
 BOLD = ("date", "time")
+TIME_MARGIN = 0.06            # fraction of the width kept free beside the time
+TIME_BOX = 0.94               # height of the time row / font size (digits plus some air)
+ROW_PAD = 0.12                # space above and below the other rows, / font size (also keeps
+                              # the taller zodiac and moon symbols from being cut)
+MIN_TIME_SHARE = 0.45         # the other rows never leave the time less than this
 
 # ============================================================
 # LOGGING (falls back to the home dir if /var/log is not writable)
@@ -128,11 +139,8 @@ TEXTS = {
         "rain_now": "Rain in the next hours ({pop}%)",
         "snow_from": "Snow from {time} ({pop}%)",
         "snow_now": "Snow in the next hours ({pop}%)",
-        "dry": "Rain unlikely in the next 12 h",
-        "comfort": "Feels like {feels}° · Humidity {humidity}%",
-        "wind": "Wind {speed} km/h {direction}",
+        "feels": " (feels {feels}°)",
         "sun": "Sunrise {rise} · Sunset {set}",
-        "compass": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
         "moon": [
             "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
             "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent",
@@ -151,11 +159,8 @@ TEXTS = {
         "rain_now": "Pioggia nelle prossime ore ({pop}%)",
         "snow_from": "Neve dalle {time} ({pop}%)",
         "snow_now": "Neve nelle prossime ore ({pop}%)",
-        "dry": "Pioggia improbabile per 12 ore",
-        "comfort": "Percepita {feels}° · Umidità {humidity}%",
-        "wind": "Vento {speed} km/h {direction}",
+        "feels": " (perc. {feels}°)",
         "sun": "Alba {rise} · Tramonto {set}",
-        "compass": ["N", "NE", "E", "SE", "S", "SO", "O", "NO"],
         "moon": [
             "Luna Nuova", "Luna Crescente", "Primo Quarto", "Gibbosa Crescente",
             "Luna Piena", "Gibbosa Calante", "Ultimo Quarto", "Luna Calante",
@@ -253,11 +258,10 @@ def fetch_weather():
     if "main" not in data:
         raise ValueError(f"OpenWeatherMap error: {data.get('message', data)}")
     main, sky = data["main"], data["weather"][0]
-    wind, sun = data.get("wind", {}), data.get("sys", {})
+    sun = data.get("sys", {})
     return {"temp": round(main["temp"]), "desc": sky["description"].capitalize(),
             "code": int(sky["id"]), "night": str(sky.get("icon", "")).endswith("n"),
-            "feels": main.get("feels_like"), "humidity": main.get("humidity"),
-            "wind": wind.get("speed"), "wind_deg": wind.get("deg"),
+            "feels": main.get("feels_like"),
             "sunrise": sun.get("sunrise"), "sunset": sun.get("sunset")}
 
 
@@ -421,28 +425,11 @@ def forecast_lines(slots, now_ts):
     soon = [x for x in upcoming if x["ts"] < now_ts + 12 * 3600]
     wet = next((x for x in soon
                 if x["code"] // 100 in (2, 3, 5, 6) and x["pop"] >= RAIN_POP), None)
-    if wet is None:
-        lines.append(T["dry"])
-    else:
+    if wet:                                                 # nothing is said when it stays dry
         kind = "snow" if wet["code"] // 100 == 6 else "rain"
         key = kind + ("_now" if wet["ts"] <= now_ts else "_from")
         start = datetime.datetime.fromtimestamp(wet["ts"]).strftime("%H:%M")
         lines.append(T[key].format(time=start, pop=round(wet["pop"] * 100)))
-    return lines
-
-
-def current_lines(weather, sun):
-    lines = []
-    if weather["feels"] is not None and weather["humidity"] is not None:
-        lines.append(T["comfort"].format(feels=round(weather["feels"]),
-                                         humidity=weather["humidity"]))
-    if weather["wind"] is not None:
-        deg = weather["wind_deg"]
-        direction = "" if deg is None else T["compass"][int(deg / 45 + 0.5) % 8]
-        lines.append(T["wind"].format(speed=round(weather["wind"] * 3.6),
-                                      direction=direction).strip())
-    if sun:
-        lines.append(T["sun"].format(rise=sun[0].strftime("%H:%M"), set=sun[1].strftime("%H:%M")))
     return lines
 
 
@@ -477,10 +464,10 @@ def info_rows(now):
         sun, synced = state["sun"], state["synced"]
         saint = state["saints"].get(now.date())             # never another day's saint
 
-    # the detail row rotates through the forecast and the current conditions
+    # the detail row rotates through the forecast and the sun times
     pages = forecast_lines(forecast, now.timestamp()) if forecast else []
-    if weather:
-        pages += current_lines(weather, sun)
+    if weather and sun:
+        pages.append(T["sun"].format(rise=sun[0].strftime("%H:%M"), set=sun[1].strftime("%H:%M")))
     detail = pages[int(time.monotonic() / ROTATE_S) % len(pages)] if pages else ""
     if synced is False:
         detail = T["unsynced"]
@@ -490,6 +477,8 @@ def info_rows(now):
 
     if weather:
         line = f"{CITY} • {weather['desc']} • {weather['temp']}°C"
+        if weather["feels"] is not None:
+            line += T["feels"].format(feels=round(weather["feels"]))
         icon = (weather["code"], weather["night"])
     else:
         line, icon = f"{CITY} • {T['weather_unavailable']}", None
@@ -507,15 +496,31 @@ root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0")
 root.attributes("-fullscreen", True)
 root.configure(bg=BG, cursor="none")
 
-fonts = {key: font.Font(root, size=-20, weight="bold" if key in BOLD else "normal")
-         for key, _ in LAYOUTS["landscape"]}
+families = font.families(root)
+FAMILY = next((name for name in FONTS if name in families), "TkDefaultFont")
+fonts = {key: font.Font(root, family=FAMILY, size=-20, weight="bold" if key in BOLD else "normal")
+         for key in ("date", "time", "weather", "detail", "astro", "saint")}
 frame = tk.Frame(root, bg=BG)
 frame.place(relx=0.5, rely=0.5, anchor="center")
 
 screen = {}          # geometry of the current layout, filled by apply_layout()
 labels = {}
 shown = {}
-ink = FG             # current text and icon colour
+night_level = 0.0    # 0 = day colours, 1 = night colours
+
+
+def _rgb(color):
+    r, g, b = root.winfo_rgb(color)                         # accepts "#RRGGBB" and colour names
+    return r // 257, g // 257, b // 257
+
+
+def mix(a, b, k):
+    """Colour between a (k=0) and b (k=1)."""
+    return "#%02x%02x%02x" % tuple(round(x + (y - x) * k) for x, y in zip(_rgb(a), _rgb(b)))
+
+
+def text_color():
+    return mix(FG, FG_NIGHT, night_level)
 
 
 def apply_layout(width, height):
@@ -523,21 +528,42 @@ def apply_layout(width, height):
     usable_w = int(width * (1 - 2 * MARGIN))
     usable_h = int(height * (1 - 2 * MARGIN))
     portrait = height > width
-    rows = LAYOUTS["portrait" if portrait else "landscape"]
-    # Line heights depend on the installed fonts: shrink all rows if they don't fit
-    total = 0
-    for key, share in rows:
-        px = max(MIN_PX, int(usable_h * share))
-        if key in fonts:
+    kind = "portrait" if portrait else "wide" if width >= 1.6 * height else "landscape"
+    rows = LAYOUTS[kind]
+    row_px = {key: max(MIN_PX, int(usable_h * share)) for key, share in rows if share}
+
+    def others_height():
+        total = 0
+        for key, px in row_px.items():
+            if key == "icon":
+                total += px
+                continue
             fonts[key].configure(size=-px)
             lines = 2 if portrait and key in PORTRAIT_SPLIT else 1
-            total += lines * fonts[key].metrics("linespace")
-        else:
-            total += px
-    scale = min(1.0, usable_h / max(total, 1))
-    row_px = {key: max(MIN_PX, int(usable_h * share * scale)) for key, share in rows}
-    for key in fonts:
-        fonts[key].configure(size=-row_px[key])
+            total += lines * fonts[key].metrics("linespace") + 2 * round(px * ROW_PAD)
+        return total
+
+    # Line heights depend on the installed fonts: keep enough room for the time
+    used = others_height()
+    limit = usable_h * (1 - MIN_TIME_SHARE)
+    if used > limit:
+        row_px = {key: max(MIN_PX, int(px * limit / used)) for key, px in row_px.items()}
+        used = others_height()
+
+    # The time: as large as the remaining height and the screen width allow
+    time_w = int(width * (1 - 2 * TIME_MARGIN))
+    clock = fonts["time"]
+
+    def clock_width():
+        return max(clock.measure(sample) for sample in ("00:00", "20:48", "23:59"))
+
+    clock.configure(size=-200)
+    time_px = max(MIN_PX, min(int(200 * time_w / max(clock_width(), 1)),
+                              int((usable_h - used) / TIME_BOX)))
+    clock.configure(size=-time_px)
+    while time_px > MIN_PX and clock_width() > time_w:
+        time_px -= 1
+        clock.configure(size=-time_px)
 
     for child in frame.winfo_children():
         child.destroy()
@@ -557,13 +583,22 @@ def apply_layout(width, height):
             parent = tk.Frame(frame, bg=BG)
             parent.pack()
             holder = holder or parent
-        labels[key] = tk.Label(parent, font=fonts[key], fg=ink, bg=BG, bd=0, pady=0)
-        labels[key].pack(side="left" if key == "weather" else "top")
+        elif key == "time":
+            parent = tk.Frame(frame, bg=BG, width=time_w, height=int(time_px * TIME_BOX))
+            parent.pack()
+        labels[key] = tk.Label(parent, font=fonts[key], fg=text_color(), bg=BG,
+                               bd=0, padx=0,
+                               pady=0 if key == "time" else round(row_px[key] * ROW_PAD))
+        if key == "time":
+            # centre the digits (not the line box, which has room for accents and descenders)
+            offset = clock.metrics("linespace") // 2 - (clock.metrics("ascent") - int(time_px * 0.36))
+            labels[key].place(relx=0.5, rely=0.5, anchor="center", y=offset)
+        else:
+            labels[key].pack(side="left" if key == "weather" else "top")
     canvas = tk.Canvas(holder, width=icon_size, height=icon_size, bg=BG, bd=0, highlightthickness=0)
     screen.update(size=(width, height), usable_w=usable_w, row_px=row_px, portrait=portrait,
                   canvas=canvas, icon_size=icon_size, icon=None)
-    logging.info("Screen %dx%d (%s layout)", width, height,
-                 "portrait" if portrait else "landscape")
+    logging.info("Screen %dx%d (%s layout, time %d px %s)", width, height, kind, time_px, FAMILY)
     now = datetime.datetime.now()
     show_clock(now)
     show_info(now)
@@ -599,7 +634,7 @@ def set_line(key, text, reserved=0, sizing=()):
 def draw_icon():
     if screen.get("icon"):
         code, night = screen["icon"]
-        weather_icons.draw(screen["canvas"], screen["icon_size"], code, night, ink, BG)
+        weather_icons.draw(screen["canvas"], screen["icon_size"], code, night, text_color(), BG)
 
 
 def show_icon(icon):
@@ -619,13 +654,16 @@ def show_icon(icon):
 
 def show_clock(now):
     set_line("date", now.strftime(T["date_format"]))
-    set_line("time", now.strftime("%H:%M"))
+    labels["time"].config(text=now.strftime("%H:%M"))      # sized once by apply_layout()
 
 
 def show_info(now):
     rows = info_rows(now)
     icon, pages = rows.pop("icon"), rows.pop("detail_all")
     show_icon(icon)
+    if "saint" not in labels:                               # wide screens: one row for both
+        saint = rows.pop("saint")
+        rows["astro"] = "   ".join(t for t in (rows["astro"], saint) if t)
     beside = icon and not screen["portrait"]
     for key, text in rows.items():
         if screen["portrait"]:
@@ -683,26 +721,19 @@ def is_night(now, sun=None):
     return (start <= t < end) if start < end else (t >= start or t < end)
 
 
-def _rgb(color):
-    r, g, b = root.winfo_rgb(color)                         # accepts "#RRGGBB" and colour names
-    return r // 257, g // 257, b // 257
-
-
-def paint(color):
-    global ink
-    ink = color
+def paint(level):
+    global night_level
+    night_level = level
     for lbl in labels.values():
-        lbl.config(fg=color)
+        lbl.config(fg=text_color())
     draw_icon()
 
 
-def fade_to(color, step=0, start=None):
-    start = start or _rgb(ink)
-    end = _rgb(color)
-    k = (step + 1) / FADE_STEPS
-    paint("#%02x%02x%02x" % tuple(round(a + (b - a) * k) for a, b in zip(start, end)))
+def fade_to(target, step=0, start=None):
+    start = night_level if start is None else start
+    paint(start + (target - start) * (step + 1) / FADE_STEPS)
     if step + 1 < FADE_STEPS:
-        root.after(FADE_MS, fade_to, color, step + 1, start)
+        root.after(FADE_MS, fade_to, target, step + 1, start)
 
 
 night_on = None
@@ -716,9 +747,9 @@ def check_night(now):
     if night != night_on:
         logging.info("Night mode %s", "ON" if night else "OFF")
         if night_on is None:                                 # at startup: no fade
-            paint(FG_NIGHT if night else FG)
+            paint(float(night))
         else:
-            fade_to(FG_NIGHT if night else FG)
+            fade_to(float(night))
         night_on = night
 
 

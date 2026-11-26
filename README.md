@@ -7,10 +7,11 @@ A fullscreen weather and clock display for Raspberry Pi using Tkinter and OpenWe
 ---
 
 ## Features
-- Fullscreen digital clock with date
+- Fullscreen digital clock with date: the time takes most of the screen, in white on black
 - Current weather with an icon (day and night versions), drawn by the app itself
-- A rotating line with the forecast for the next 24 hours (min/max, rain or snow), feels-like
-  temperature, humidity, wind, sunrise and sunset
+- Feels-like temperature next to the real one
+- A rotating line with the min/max of the next 24 hours, sunrise and sunset, plus rain or snow
+  only when expected
 - Zodiac sign, moon phase and saint of the day, downloaded 7 days in advance
 - Warning on screen when the system time is not synchronised (Raspberry Pi boards usually have
   no battery-backed clock)
@@ -64,6 +65,7 @@ All settings (in `/etc/clockweather.env`, also editable from the management cons
 | `OWM_API_KEY` | | OpenWeatherMap key (the free plan is enough) |
 | `CW_CITY` | `Turin` | City, as known to OpenWeatherMap |
 | `CW_LANG` | `en` | `it` = Italian screen (texts, `dd/mm/yyyy` date, weather description), like the preview above |
+| `CW_FG` | `#FFFFFF` | Day text colour |
 | `CW_NIGHT` | `on` | `on` = fixed hours, `sun` = from sunset to sunrise, `off` = disabled |
 | `CW_NIGHT_START` | `22:30` | Start of the night with fixed hours (also used by `sun` until the first weather data arrives) |
 | `CW_NIGHT_END` | `07:30` | End of the night |
@@ -85,8 +87,9 @@ python3 display_clock_weather.py
 
 If everything is correct, you’ll see the fullscreen clock and weather on your display.
 The layout adapts automatically to the screen resolution and orientation
-(tested at 480x320, 320x480, 800x480, 1920x1080, 2560x1440 and 1440x2560). In portrait the
-weather icon gets its own row and the long lines are split in two.
+(tested at 480x320, 320x480, 800x480, 1920x1080, 2560x1440 and 1440x2560). Text uses a
+Helvetica-like font (Nimbus Sans on Raspberry Pi OS). On wide screens zodiac, moon and saint share one line; in portrait the weather icon
+gets its own row and the long lines are split in two.
 
 **Optional management console:** a LAN-only web page to change city, language, night mode,
 Wi-Fi networks, restart/update the clock — plus a setup hotspot (`piclock-setup`) when the Pi
@@ -288,6 +291,9 @@ V1.4.0
 - Warning when the system time is not synchronised
 - New layout that adapts to any screen, also when resolution or rotation change while running
 - Weather errors logged on one line, without the API key
+
+V1.4.1 Classic style (white, Helvetica-like) with a larger time, feels-like temperature next
+to the real one, wind and humidity removed, rain shown only when expected
 
 ## Notes
 Tested on Raspberry Pi OS (Bookworm) with X11 desktop session using a Raspberry PI 4
