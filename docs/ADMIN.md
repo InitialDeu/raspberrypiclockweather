@@ -9,7 +9,7 @@ Everything lives in `admin/` and uses only the Python standard library.
 | Page | |
 |---|---|
 | **Stato** | clock service status, version (git commit), Wi-Fi network and IP, uptime, CPU temperature, last 40 log lines. Buttons: restart clock, update from GitHub (`git pull`), reboot the Pi |
-| **Impostazioni** | city, language, OpenWeatherMap key, night mode (on/off, start, end, colour). Saved to `/etc/clockweather.env`, the clock restarts by itself. Change the console password |
+| **Impostazioni** | city, language, OpenWeatherMap key, night mode (fixed hours / sunset to sunrise / off, start, end, colour). Saved to `/etc/clockweather.env`, the clock restarts by itself. Change the console password |
 | **Wi-Fi** | saved networks (remove), visible networks, add a network (SSID, password, priority) |
 
 ### Setup hotspot (moving the Pi to a network you don't know yet)

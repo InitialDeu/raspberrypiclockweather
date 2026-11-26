@@ -221,7 +221,14 @@ def settings_page(msg=None, err=False):
     env = read_env()[0]
     v = {k: env.get(k, DEFAULTS[k]) for k in EDITABLE}
     has_key = bool(env.get("OWM_API_KEY")) and env.get("OWM_API_KEY") != "YOUR_API_KEY"
-    night_on = v["CW_NIGHT"].lower() not in ("off", "0", "false", "no")
+    night = v["CW_NIGHT"].strip().lower()
+    if night in ("off", "0", "false", "no"):
+        night = "off"
+    elif night != "sun":
+        night = "on"
+    night_options = "".join(
+        f'<option value="{key}"{" selected" if key == night else ""}>{label}</option>'
+        for key, label in (("on", "A orari fissi"), ("sun", "Dal tramonto all&#39;alba"), ("off", "Disattivata")))
     body = f"""<section><h2>Impostazioni orologio</h2><form method="post" action="/settings">{csrf_field()}
 <label>Città (come la conosce OpenWeatherMap)</label><input name="CW_CITY" value="{esc(v['CW_CITY'])}" required>
 <label>Lingua</label><select name="CW_LANG">
@@ -229,11 +236,11 @@ def settings_page(msg=None, err=False):
 <option value="en"{' selected' if v['CW_LANG'] == 'en' else ''}>English</option></select>
 <label>Chiave API OpenWeatherMap {'(impostata: lascia vuoto per non cambiarla)' if has_key else '(NON impostata)'}</label>
 <input name="OWM_API_KEY" value="" autocomplete="off" placeholder="{'••••••••' if has_key else 'incolla la chiave'}">
-<label><input type="checkbox" name="CW_NIGHT" value="on"{' checked' if night_on else ''}> Modalità notte</label>
+<label>Modalità notte</label><select name="CW_NIGHT">{night_options}</select>
 <div class="row"><div><label>Dalle</label><input name="CW_NIGHT_START" value="{esc(v['CW_NIGHT_START'])}" pattern="[0-2][0-9]:[0-5][0-9]"></div>
 <div><label>Alle</label><input name="CW_NIGHT_END" value="{esc(v['CW_NIGHT_END'])}" pattern="[0-2][0-9]:[0-5][0-9]"></div>
 <div><label>Colore notte</label><input type="color" name="CW_NIGHT_FG" value="{esc(v['CW_NIGHT_FG'])}"></div></div>
-<p class="hint">Più scuro il colore, meno luce di notte. Al salvataggio l'orologio si riavvia.</p>
+<p class="hint">Più scuro il colore, meno luce di notte. Con «Dal tramonto all'alba» gli orari valgono solo finché non arrivano i dati meteo. Al salvataggio l'orologio si riavvia.</p>
 <button>Salva e applica</button></form></section>
 <section><h2>Password della console</h2><form method="post" action="/password">{csrf_field()}
 <label>Nuova password (almeno 8 caratteri)</label><input type="password" name="pw1" autocomplete="new-password">
@@ -432,10 +439,13 @@ class Handler(BaseHTTPRequestHandler):
         color = f.get("CW_NIGHT_FG", "")
         if not RE_COLOR.fullmatch(color):
             raise ValueError("Colore non valido")
+        night = f.get("CW_NIGHT", "on")
+        if night not in ("on", "sun", "off"):
+            raise ValueError("Modalità notte non valida")
         key = f.get("OWM_API_KEY", "").strip()
         if key and not RE_APIKEY.fullmatch(key):
             raise ValueError("Chiave API non valida")
-        write_env({"CW_CITY": city, "CW_LANG": lang, "CW_NIGHT": "on" if f.get("CW_NIGHT") else "off",
+        write_env({"CW_CITY": city, "CW_LANG": lang, "CW_NIGHT": night,
                    "CW_NIGHT_FG": color.upper(), "CW_NIGHT_START": start, "CW_NIGHT_END": end,
                    "OWM_API_KEY": key or None})
         rc, out = sh(["systemctl", "restart", SERVICE])
