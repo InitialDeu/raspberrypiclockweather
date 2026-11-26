@@ -82,7 +82,13 @@ LAYOUTS = {
                   ("detail", 0.062), ("astro", 0.064), ("saint", 0.064)),
     "portrait": (("date", 0.06), ("time", None), ("icon", 0.12), ("weather", 0.045),
                  ("detail", 0.034), ("astro", 0.037), ("saint", 0.037)),
+    # small screens: fewer rows, zodiac and moon rotate in the "detail" row
+    "compact": (("date", 0.105), ("time", None), ("weather", 0.082),
+                ("detail", 0.064), ("saint", 0.072)),
+    "compact portrait": (("date", 0.06), ("time", None), ("icon", 0.12), ("weather", 0.05),
+                         ("detail", 0.04), ("saint", 0.045)),
 }
+SMALL_SCREEN = 400            # shorter side in pixels below which the compact layouts are used
 # Portrait screens are narrow but tall: these rows are split in two at the separator
 PORTRAIT_SPLIT = {"weather": (" • ", " · "), "astro": ("   ",)}
 # Helvetica-like fonts, the first one installed is used (Nimbus Sans on Raspberry Pi OS)
@@ -93,6 +99,7 @@ TIME_MARGIN = 0.06            # fraction of the width kept free beside the time
 TIME_BOX = 0.94               # height of the time row / font size (digits plus some air)
 ROW_PAD = 0.12                # space above and below the other rows, / font size (also keeps
                               # the taller zodiac and moon symbols from being cut)
+ROW_PAD_SMALL = 0.22          # same on small screens, which need more air
 MIN_TIME_SHARE = 0.45         # the other rows never leave the time less than this
 
 # ============================================================
@@ -444,8 +451,9 @@ def read_net_status():
 net_seen = {"mode": None, "url_until": time.monotonic() + SHOW_URL_S}
 
 
-def info_rows(now):
-    """Text of the rows below the clock, plus "icon": (condition code, night) or None."""
+def info_rows(now, compact=False):
+    """Text of the rows below the clock, plus "icon": (condition code, night) or None.
+    With `compact`, zodiac and moon are one of the pages of the rotating row."""
     net = read_net_status()
     if net:
         if net.get("mode") == "ap":
@@ -468,6 +476,9 @@ def info_rows(now):
     pages = forecast_lines(forecast, now.timestamp()) if forecast else []
     if weather and sun:
         pages.append(T["sun"].format(rise=sun[0].strftime("%H:%M"), set=sun[1].strftime("%H:%M")))
+    astro = f"{zodiac_label(get_zodiac_sign(now))}   {get_moon_phase(utc_now())}"
+    if compact:
+        pages.append(astro)
     detail = pages[int(time.monotonic() / ROTATE_S) % len(pages)] if pages else ""
     if synced is False:
         detail = T["unsynced"]
@@ -483,7 +494,7 @@ def info_rows(now):
     else:
         line, icon = f"{CITY} • {T['weather_unavailable']}", None
     return {"weather": line, "detail": detail, "detail_all": [detail] + pages,
-            "astro": f"{zodiac_label(get_zodiac_sign(now))}   {get_moon_phase(utc_now())}",
+            "astro": astro,
             "saint": saint_label(saint) if saint else T["saint_unavailable"], "icon": icon}
 
 
@@ -528,7 +539,12 @@ def apply_layout(width, height):
     usable_w = int(width * (1 - 2 * MARGIN))
     usable_h = int(height * (1 - 2 * MARGIN))
     portrait = height > width
-    kind = "portrait" if portrait else "wide" if width >= 1.6 * height else "landscape"
+    compact = min(width, height) < SMALL_SCREEN
+    if compact:
+        kind = "compact portrait" if portrait else "compact"
+    else:
+        kind = "portrait" if portrait else "wide" if width >= 1.6 * height else "landscape"
+    pad = ROW_PAD_SMALL if compact else ROW_PAD
     rows = LAYOUTS[kind]
     row_px = {key: max(MIN_PX, int(usable_h * share)) for key, share in rows if share}
 
@@ -540,7 +556,7 @@ def apply_layout(width, height):
                 continue
             fonts[key].configure(size=-px)
             lines = 2 if portrait and key in PORTRAIT_SPLIT else 1
-            total += lines * fonts[key].metrics("linespace") + 2 * round(px * ROW_PAD)
+            total += lines * fonts[key].metrics("linespace") + 2 * round(px * pad)
         return total
 
     # Line heights depend on the installed fonts: keep enough room for the time
@@ -588,7 +604,7 @@ def apply_layout(width, height):
             parent.pack()
         labels[key] = tk.Label(parent, font=fonts[key], fg=text_color(), bg=BG,
                                bd=0, padx=0,
-                               pady=0 if key == "time" else round(row_px[key] * ROW_PAD))
+                               pady=0 if key == "time" else round(row_px[key] * pad))
         if key == "time":
             # centre the digits (not the line box, which has room for accents and descenders)
             offset = clock.metrics("linespace") // 2 - (clock.metrics("ascent") - int(time_px * 0.36))
@@ -597,6 +613,7 @@ def apply_layout(width, height):
             labels[key].pack(side="left" if key == "weather" else "top")
     canvas = tk.Canvas(holder, width=icon_size, height=icon_size, bg=BG, bd=0, highlightthickness=0)
     screen.update(size=(width, height), usable_w=usable_w, row_px=row_px, portrait=portrait,
+                  compact=compact,
                   canvas=canvas, icon_size=icon_size, icon=None)
     logging.info("Screen %dx%d (%s layout, time %d px %s)", width, height, kind, time_px, FAMILY)
     now = datetime.datetime.now()
@@ -658,7 +675,9 @@ def show_clock(now):
 
 
 def show_info(now):
-    rows = info_rows(now)
+    rows = info_rows(now, screen["compact"])
+    if screen["compact"]:
+        del rows["astro"]                                   # it rotates in the detail row
     icon, pages = rows.pop("icon"), rows.pop("detail_all")
     show_icon(icon)
     if "saint" not in labels:                               # wide screens: one row for both

@@ -35,6 +35,7 @@ sul **Raspberry Pi Zero 2 W** con schermo **SPI da 3,5" 480×320** (novembre 202
 | 24 | Disposizione pensata per schermi orizzontali; un cambio di risoluzione o rotazione richiedeva il riavvio | Due disposizioni (orizzontale e verticale, con righe spezzate in due), dimensioni calcolate sui font installati e **ricalcolate al volo** se la finestra cambia | Stesso codice sul Pi 4 e sul Pi Zero |
 | 25 | Senza rete il meteo scriveva nel log un errore completo ogni minuto, con la chiave API nell'indirizzo | Una riga sola, con la chiave sostituita da `***`; tolto anche lo spazio in "Sant' Umile" | Meno scritture sulla SD, chiave non esposta |
 | 26 | L'ora non spiccava abbastanza rispetto alle informazioni | (v1.4.1) Ritorno allo **stile originale** (testo bianco, font tipo Helvetica: Nimbus Sans, data e ora in grassetto). L'ora si prende tutto lo spazio lasciato dalle altre righe. Su schermi 16:10 o più larghi segno, luna e santo stanno su una riga. La **temperatura percepita** è accanto a quella reale, `5°C (perc. 2°)`; la riga a rotazione mostra min/max, alba/tramonto e la pioggia **solo se prevista**. Colore di giorno regolabile con `CW_FG` | È un orologio: l'ora si deve leggere al primo colpo d'occhio |
+| 27 | Sullo schermo da 3,5" la parte sotto l'ora era affollata (quattro righe) | (v1.4.2) Sugli schermi piccoli (lato corto sotto 400 px) le righe sono **tre**, più distanziate: meteo, riga a rotazione (dove entrano anche segno e luna) e santo sempre visibile | Più leggibile senza rimpicciolire l'ora |
 
 ### Service systemd (`clockweather.service`)
 

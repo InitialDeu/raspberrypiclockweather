@@ -88,7 +88,9 @@ python3 display_clock_weather.py
 If everything is correct, you’ll see the fullscreen clock and weather on your display.
 The layout adapts automatically to the screen resolution and orientation
 (tested at 480x320, 320x480, 800x480, 1920x1080, 2560x1440 and 1440x2560). Text uses a
-Helvetica-like font (Nimbus Sans on Raspberry Pi OS). On wide screens zodiac, moon and saint share one line; in portrait the weather icon
+Helvetica-like font (Nimbus Sans on Raspberry Pi OS). On small screens (shorter side under 400 px, e.g.
+3.5" 480x320) there are only three lines below the time: zodiac and moon join the rotating one.
+On wide screens zodiac, moon and saint share one line; in portrait the weather icon
 gets its own row and the long lines are split in two.
 
 **Optional management console:** a LAN-only web page to change city, language, night mode,
@@ -294,6 +296,8 @@ V1.4.0
 
 V1.4.1 Classic style (white, Helvetica-like) with a larger time, feels-like temperature next
 to the real one, wind and humidity removed, rain shown only when expected
+
+V1.4.2 Less crowded layout on small screens
 
 ## Notes
 Tested on Raspberry Pi OS (Bookworm) with X11 desktop session using a Raspberry PI 4
